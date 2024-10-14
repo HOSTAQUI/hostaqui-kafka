@@ -21,24 +21,19 @@ services:
       - KAFKA_CFG_SASL_ENABLED_MECHANISMS=SCRAM-SHA-256
       - KAFKA_CFG_SASL_MECHANISM_INTER_BROKER_PROTOCOL=SCRAM-SHA-256
       - KAFKA_CFG_SECURITY_INTER_BROKER_PROTOCOL=SASL_PLAINTEXT
-      - KAFKA_OPTS=-Djava.security.auth.login.config=/opt/bitnami/kafka/config/kafka_server_jaas.conf
-      - KAFKA_USERNAME=admin
-      - KAFKA_PASSWORD=admin-secret
-      - USER_USERNAME=user
-      - USER_PASSWORD=user-secret
     volumes:
-      - ./kafka_server_jaas.conf:/opt/bitnami/kafka/config/kafka_server_jaas.conf
+      - ./start-kafka.sh:/start-kafka.sh
+      - ./secret.yaml:/opt/bitnami/kafka/config/secret.yaml
     entrypoint:
       - sh
       - -c
       - |
-        echo "KafkaServer {
-          org.apache.kafka.common.security.scram.ScramLoginModule required
-          username=\"${KAFKA_USERNAME}\"
-          password=\"${KAFKA_PASSWORD}\";
-        };" > /opt/bitnami/kafka/config/kafka_server_jaas.conf &&
-        /opt/bitnami/kafka/bin/kafka-configs.sh --zookeeper zookeeper:2181 --alter --add-config 'SCRAM-SHA-256=[iterations=4096,password=${KAFKA_PASSWORD}]' --entity-type users --entity-name ${KAFKA_USERNAME} &&
-        /opt/bitnami/kafka/bin/kafka-configs.sh --zookeeper zookeeper:2181 --alter --add-config 'SCRAM-SHA-256=[iterations=4096,password=${USER_PASSWORD}]' --entity-type users --entity-name ${USER_USERNAME} &&
+        yaml_username=$(grep 'username:' /opt/bitnami/kafka/config/secret.yaml | head -1 | awk '{print $2}')
+        yaml_password=$(grep 'password:' /opt/bitnami/kafka/config/secret.yaml | head -1 | awk '{print $2}')
+        yaml_user_username=$(grep 'username:' /opt/bitnami/kafka/config/secret.yaml | tail -1 | awk '{print $2}')
+        yaml_user_password=$(grep 'password:' /opt/bitnami/kafka/config/secret.yaml | tail -1 | awk '{print $2}')
+        /opt/bitnami/kafka/bin/kafka-configs.sh --zookeeper zookeeper:2181 --alter --add-config "SCRAM-SHA-256=[iterations=4096,password=${yaml_password}]" --entity-type users --entity-name ${yaml_username} &&
+        /opt/bitnami/kafka/bin/kafka-configs.sh --zookeeper zookeeper:2181 --alter --add-config "SCRAM-SHA-256=[iterations=4096,password=${yaml_user_password}]" --entity-type users --entity-name ${yaml_user_username} &&
         /opt/bitnami/kafka/bin/kafka-server-start.sh /opt/bitnami/kafka/config/server.properties
     depends_on:
       - zookeeper
@@ -52,6 +47,6 @@ services:
       - KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS=localhost:9092
       - KAFKA_CLUSTERS_0_PROPERTIES_SECURITY_PROTOCOL=SASL_PLAINTEXT
       - KAFKA_CLUSTERS_0_PROPERTIES_SASL_MECHANISM=SCRAM-SHA-256
-      - KAFKA_CLUSTERS_0_PROPERTIES_SASL_JAAS_CONFIG=org.apache.kafka.common.security.scram.ScramLoginModule required username=${KAFKA_USERNAME} password=${KAFKA_PASSWORD};
+      - KAFKA_CLUSTERS_0_PROPERTIES_SASL_JAAS_CONFIG=org.apache.kafka.common.security.scram.ScramLoginModule required username=admin password=admin-secret;
     depends_on:
       - kafka
