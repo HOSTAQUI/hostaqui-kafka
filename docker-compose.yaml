@@ -20,7 +20,10 @@ services:
       - ALLOW_PLAINTEXT_LISTENER=yes
       - KAFKA_CFG_SASL_ENABLED_MECHANISMS=SCRAM-SHA-256
       - KAFKA_CFG_SASL_MECHANISM_INTER_BROKER_PROTOCOL=SCRAM-SHA-256
-      - KAFKA_CFG_SASL_JAAS_CONFIG=org.apache.kafka.common.security.scram.ScramLoginModule required username="${KAFKA_USERNAME}" password="${KAFKA_PASSWORD}" user_${KAFKA_USERNAME}="${KAFKA_PASSWORD}" user_${USER_USERNAME}="${USER_PASSWORD}";
+      - KAFKA_CFG_SECURITY_INTER_BROKER_PROTOCOL=SASL_PLAINTEXT
+      - KAFKA_OPTS=-Djava.security.auth.login.config=/opt/bitnami/kafka/config/kafka_server_jaas.conf
+    volumes:
+      - ./kafka_server_jaas.conf:/opt/bitnami/kafka/config/kafka_server_jaas.conf
     depends_on:
       - zookeeper
 
