@@ -1,52 +1,55 @@
 version: '3.8'
+
 services:
   zookeeper:
-    image: bitnami/zookeeper:3.8
+    image: confluentinc/cp-zookeeper:latest
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
     ports:
       - '2181:2181'
-    environment:
-      - ALLOW_ANONYMOUS_LOGIN=yes
+    networks:
+      - kafka-network
 
   kafka:
-    image: bitnami/kafka:3.5
+    image: confluentinc/cp-kafka:latest
+    depends_on:
+      - zookeeper
     ports:
       - '9092:9092'
     environment:
-      - KAFKA_BROKER_ID=1
-      - KAFKA_ZOOKEEPER_CONNECT=zookeeper:2181
-      - KAFKA_LISTENERS=SASL_PLAINTEXT://0.0.0.0:9092
-      - KAFKA_ADVERTISED_LISTENERS=SASL_PLAINTEXT://localhost:9092
-      - KAFKA_INTER_BROKER_LISTENER_NAME=SASL_PLAINTEXT
-      - ALLOW_PLAINTEXT_LISTENER=yes
-      - KAFKA_CFG_SASL_ENABLED_MECHANISMS=SCRAM-SHA-256
-      - KAFKA_CFG_SASL_MECHANISM_INTER_BROKER_PROTOCOL=SCRAM-SHA-256
-      - KAFKA_CFG_SECURITY_INTER_BROKER_PROTOCOL=SASL_PLAINTEXT
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,PLAINTEXT_HOST://localhost:29092
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: 'true'
+      KAFKA_AUTHORIZER_CLASS_NAME: kafka.security.auth.SimpleAclAuthorizer
+      KAFKA_SUPER_USERS: 'User:kafka'
+      KAFKA_ALLOW_EVERYONE_IF_NO_ACL_FOUND: 'true'
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092
+      KAFKA_OPTS: '-Djava.security.auth.login.config=/etc/kafka/kafka_server_jaas.conf'
+      KAFKA_SASL_ENABLED_MECHANISMS: PLAIN
+      KAFKA_SASL_MECHANISM_INTER_BROKER_PROTOCOL: PLAIN
     volumes:
-      - ./start-kafka.sh:/start-kafka.sh
-      - ./secret.yaml:/opt/bitnami/kafka/config/secret.yaml
-    entrypoint:
-      - sh
-      - -c
-      - |
-        yaml_username=$(grep 'username:' /opt/bitnami/kafka/config/secret.yaml | head -1 | awk '{print $2}')
-        yaml_password=$(grep 'password:' /opt/bitnami/kafka/config/secret.yaml | head -1 | awk '{print $2}')
-        yaml_user_username=$(grep 'username:' /opt/bitnami/kafka/config/secret.yaml | tail -1 | awk '{print $2}')
-        yaml_user_password=$(grep 'password:' /opt/bitnami/kafka/config/secret.yaml | tail -1 | awk '{print $2}')
-        /opt/bitnami/kafka/bin/kafka-configs.sh --zookeeper zookeeper:2181 --alter --add-config "SCRAM-SHA-256=[iterations=4096,password=${yaml_password}]" --entity-type users --entity-name ${yaml_username} &&
-        /opt/bitnami/kafka/bin/kafka-configs.sh --zookeeper zookeeper:2181 --alter --add-config "SCRAM-SHA-256=[iterations=4096,password=${yaml_user_password}]" --entity-type users --entity-name ${yaml_user_username} &&
-        /opt/bitnami/kafka/bin/kafka-server-start.sh /opt/bitnami/kafka/config/server.properties
-    depends_on:
-      - zookeeper
+      - ./secrets:/etc/kafka/secrets
+      - ./kafka_server_jaas.conf:/etc/kafka/kafka_server_jaas.conf
+    networks:
+      - kafka-network
 
   kafka-ui:
     image: provectuslabs/kafka-ui:latest
+    depends_on:
+      - kafka
     ports:
       - '8080:8080'
     environment:
-      - KAFKA_CLUSTERS_0_NAME=local
-      - KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS=localhost:9092
-      - KAFKA_CLUSTERS_0_PROPERTIES_SECURITY_PROTOCOL=SASL_PLAINTEXT
-      - KAFKA_CLUSTERS_0_PROPERTIES_SASL_MECHANISM=SCRAM-SHA-256
-      - KAFKA_CLUSTERS_0_PROPERTIES_SASL_JAAS_CONFIG=org.apache.kafka.common.security.scram.ScramLoginModule required username=admin password=admin-secret;
-    depends_on:
-      - kafka
+      KAFKA_CLUSTERS_0_NAME: local
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:9092
+      KAFKA_CLUSTERS_0_ZOOKEEPER: zookeeper:2181
+    networks:
+      - kafka-network
+
+networks:
+  kafka-network:
+    driver: bridge
